@@ -237,6 +237,26 @@ var defaultModelRatio = map[string]float64{
 	"deepseek-chat":          0.27 / 2,
 	"deepseek-coder":         0.27 / 2,
 	"deepseek-reasoner":      0.55 / 2, // 0.55 / 1k tokens
+	// 火山视频模型 - 基于官方定价设置
+	// doubao-seedance 系列按照 completion_tokens 计费
+	// 火山视频模型的具体版本
+	"doubao-seedance-pro-250528":             5.0, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-t2v-250428":    3.2, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-i2v-250428":    3.2, // 根据实际定价调整
+	"bytedance-seedance-pro-250528":          5.0, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-t2v-250428": 3.2, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-i2v-250428": 3.2, // 根据实际定价调整
+	// 火山视频模型的通用版本（不带日期后缀）
+	"doubao-seedance-pro":             5.0, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-t2v":    3.2, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-i2v":    3.2, // 根据实际定价调整
+	"bytedance-seedance-pro":          5.0, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-t2v": 3.2, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-i2v": 3.2, // 根据实际定价调整
+	// wan2 系列模型
+	"wan2-1-14b-t2v-250428":   3.0, // 根据实际定价调整
+	"wan2-1-14b-i2v-250428":   3.0, // 根据实际定价调整
+	"wan2-1-14b-flf2v-250428": 3.0, // 根据实际定价调整
 	// Perplexity online 模型对搜索额外收费，有需要应自行调整，此处不计入搜索费用
 	"llama-3-sonar-small-32k-chat":   0.2 / 1000 * USD,
 	"llama-3-sonar-small-32k-online": 0.2 / 1000 * USD,
@@ -277,6 +297,24 @@ var defaultModelPrice = map[string]float64{
 	"mj_upscale":              0.05,
 	"swap_face":               0.05,
 	"mj_upload":               0.05,
+	// 火山视频模型按次计费价格
+	"doubao-seedance-pro-250528":             0.8, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-t2v-250428":    0.5, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-i2v-250428":    0.5, // 根据实际定价调整
+	"bytedance-seedance-pro-250528":          0.8, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-t2v-250428": 0.5, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-i2v-250428": 0.5, // 根据实际定价调整
+	// 火山视频模型通用版本
+	"doubao-seedance-pro":             0.8, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-t2v":    0.5, // 根据实际定价调整
+	"doubao-seedance-1-0-lite-i2v":    0.5, // 根据实际定价调整
+	"bytedance-seedance-pro":          0.8, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-t2v": 0.5, // 根据实际定价调整
+	"bytedance-seedance-1-0-lite-i2v": 0.5, // 根据实际定价调整
+	// wan2 系列模型
+	"wan2-1-14b-t2v-250428":   0.6, // 根据实际定价调整
+	"wan2-1-14b-i2v-250428":   0.6, // 根据实际定价调整
+	"wan2-1-14b-flf2v-250428": 0.6, // 根据实际定价调整
 }
 
 var (
@@ -299,6 +337,22 @@ var defaultCompletionRatio = map[string]float64{
 	"gpt-4-all":                      2,
 	"gpt-image-1":                    8,
 	"gemini-2.5-flash-image-preview": 8.3333333333,
+	// 火山视频模型补全倍率（对于视频模型，主要是completion tokens）
+	"doubao-seedance-pro-250528":             1.0,
+	"doubao-seedance-1-0-lite-t2v-250428":    1.0,
+	"doubao-seedance-1-0-lite-i2v-250428":    1.0,
+	"bytedance-seedance-pro-250528":          1.0,
+	"bytedance-seedance-1-0-lite-t2v-250428": 1.0,
+	"bytedance-seedance-1-0-lite-i2v-250428": 1.0,
+	"doubao-seedance-pro":                    1.0,
+	"doubao-seedance-1-0-lite-t2v":           1.0,
+	"doubao-seedance-1-0-lite-i2v":           1.0,
+	"bytedance-seedance-pro":                 1.0,
+	"bytedance-seedance-1-0-lite-t2v":        1.0,
+	"bytedance-seedance-1-0-lite-i2v":        1.0,
+	"wan2-1-14b-t2v-250428":                  1.0,
+	"wan2-1-14b-i2v-250428":                  1.0,
+	"wan2-1-14b-flf2v-250428":                1.0,
 }
 
 // InitRatioSettings initializes all model related settings maps

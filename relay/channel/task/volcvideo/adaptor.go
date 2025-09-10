@@ -212,6 +212,15 @@ func (a *TaskAdaptor) GetModelList() []string {
 		"doubao-seedance-pro-250528",
 		"doubao-seedance-1-0-lite-t2v-250428",
 		"doubao-seedance-1-0-lite-i2v-250428",
+		"bytedance-seedance-pro-250528",
+		"bytedance-seedance-1-0-lite-t2v-250428",
+		"bytedance-seedance-1-0-lite-i2v-250428",
+		"doubao-seedance-pro",
+		"doubao-seedance-1-0-lite-t2v",
+		"doubao-seedance-1-0-lite-i2v",
+		"bytedance-seedance-pro",
+		"bytedance-seedance-1-0-lite-t2v",
+		"bytedance-seedance-1-0-lite-i2v",
 		"wan2-1-14b-t2v-250428",
 		"wan2-1-14b-i2v-250428",
 		"wan2-1-14b-flf2v-250428",
@@ -274,6 +283,11 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		}
 		if dataBytes, err := json.Marshal(successData); err == nil {
 			res.Reason = string(dataBytes)
+		}
+		// 添加usage信息用于token计费
+		if fr.Usage.TotalTokens > 0 {
+			res.CompletionTokens = fr.Usage.CompletionTokens
+			res.TotalTokens = fr.Usage.TotalTokens
 		}
 	case "failed":
 		res.Status = model.TaskStatusFailure

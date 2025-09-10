@@ -487,10 +487,12 @@ type TaskSubmitReq struct {
 }
 
 type TaskInfo struct {
-	Code     int    `json:"code"`
-	TaskID   string `json:"task_id"`
-	Status   string `json:"status"`
-	Reason   string `json:"reason,omitempty"`
-	Url      string `json:"url,omitempty"`
-	Progress string `json:"progress,omitempty"`
+	Code             int    `json:"code"`
+	TaskID           string `json:"task_id"`
+	Status           string `json:"status"`
+	Reason           string `json:"reason,omitempty"`
+	Url              string `json:"url,omitempty"`
+	Progress         string `json:"progress,omitempty"`
+	CompletionTokens int    `json:"completion_tokens,omitempty"`
+	TotalTokens      int    `json:"total_tokens,omitempty"`
 }

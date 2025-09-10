@@ -13,7 +13,10 @@ import (
 	"one-api/relay"
 	"one-api/relay/channel"
 	relaycommon "one-api/relay/common"
+	"one-api/setting/ratio_setting"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 func UpdateVideoTaskAll(ctx context.Context, platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*model.Task) error {
@@ -118,6 +121,138 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 			task.FinishTime = now
 		}
 		task.FailReason = taskResult.Url
+		// 如果有usage信息，基于token计费
+		if taskResult.TotalTokens > 0 {
+			// 获取模型名称 - 优先使用任务保存的模型名称
+			modelName := task.ModelName
+
+			// 如果任务中没有保存模型名称，从taskResult.Reason中解析（包含完整的响应数据）
+			if modelName == "" && taskResult.Reason != "" {
+				var successData map[string]interface{}
+				if err := json.Unmarshal([]byte(taskResult.Reason), &successData); err == nil {
+					if model, ok := successData["model"].(string); ok {
+						modelName = model
+					}
+				}
+			}
+
+			// 如果还是没有获取到，尝试从任务数据中获取
+			if modelName == "" {
+				var taskData map[string]interface{}
+				if err := json.Unmarshal(task.Data, &taskData); err == nil {
+					if model, ok := taskData["model"].(string); ok {
+						modelName = model
+					}
+				}
+			}
+
+			// 如果还是没有，使用默认的模型名称
+			if modelName == "" {
+				modelName = "doubao-seedance-1-0-lite-i2v" // 默认模型
+				logger.LogInfo(ctx, fmt.Sprintf("任务 %s 无法获取模型名称，使用默认模型: %s", task.TaskID, modelName))
+			}
+
+			// 获取模型倍率和补全倍率
+			modelRatio, _, _ := ratio_setting.GetModelRatio(modelName)
+			if modelRatio == 0 {
+				modelRatio = 1.0 // 默认倍率
+			}
+
+			// 获取补全倍率（对于视频模型，主要是 completion tokens）
+			completionRatio := ratio_setting.GetCompletionRatio(modelName)
+			if completionRatio == 0 {
+				completionRatio = 1.0 // 默认补全倍率
+			}
+
+			// 获取分组倍率（使用任务保存的分组信息）
+			groupName := task.Group
+			if groupName == "" {
+				groupName = "default"
+			}
+			groupRatio := ratio_setting.GetGroupRatio(groupName)
+
+			// 计算实际消耗的quota（按照GPT-4o的计费方式）
+			// 对于视频模型，主要是 completion_tokens，没有 prompt_tokens
+			actualQuota := int(float64(taskResult.TotalTokens) * completionRatio * modelRatio * groupRatio)
+			if actualQuota <= 0 && modelRatio > 0 {
+				actualQuota = 1
+			}
+
+			// 计算差额
+			quotaDelta := actualQuota - task.Quota
+
+			if quotaDelta != 0 {
+				if quotaDelta > 0 {
+					// 需要补扣费
+					if err := model.DecreaseUserQuota(task.UserId, quotaDelta); err != nil {
+						logger.LogError(ctx, "Failed to decrease user quota: "+err.Error())
+					} else {
+						// 使用消费日志记录
+						logContent := fmt.Sprintf("视频任务补充计费，模型倍率 %.2f，补全倍率 %.2f，分组倍率 %.2f", modelRatio, completionRatio, groupRatio)
+						other := make(map[string]interface{})
+						other["task_id"] = task.TaskID
+						other["action"] = task.Action
+						other["model_ratio"] = modelRatio
+						other["completion_ratio"] = completionRatio
+						other["group_ratio"] = groupRatio
+						other["adjustment_type"] = "supplement" // 补充计费
+
+						useTime := int(task.FinishTime - task.SubmitTime)
+						if useTime <= 0 {
+							useTime = int(time.Now().Unix() - task.SubmitTime)
+						}
+
+						// 获取用户信息用于日志显示
+						user, err := model.GetUserById(task.UserId, false)
+						var username string
+						if err == nil && user != nil {
+							username = user.Username
+						} else {
+							username = fmt.Sprintf("user_%d", task.UserId)
+						}
+
+						// 创建一个临时的 gin.Context 用于记录日志
+						tempCtx := &gin.Context{}
+						tempCtx.Set("id", task.UserId)
+						tempCtx.Set("token_id", task.TokenId)
+						tempCtx.Set("token_name", task.TokenName)
+						tempCtx.Set("username", username)
+
+						model.RecordConsumeLog(tempCtx, task.UserId, model.RecordConsumeLogParams{
+							ChannelId:        task.ChannelId,
+							PromptTokens:     0,
+							CompletionTokens: taskResult.TotalTokens,
+							ModelName:        modelName,
+							TokenName:        task.TokenName,
+							Quota:            quotaDelta,
+							Content:          logContent,
+							TokenId:          task.TokenId,
+							UseTimeSeconds:   useTime,
+							IsStream:         false,
+							Group:            task.Group,
+							Other:            other,
+						})
+
+						model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quotaDelta)
+						model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
+					}
+				} else {
+					// 需要退费
+					if err := model.IncreaseUserQuota(task.UserId, -quotaDelta, false); err != nil {
+						logger.LogError(ctx, "Failed to increase user quota: "+err.Error())
+					} else {
+						// 退费时记录系统日志
+						logContent := fmt.Sprintf("视频任务 %s 基于token计费调整，退还 %s (tokens: %d, 模型: %s)",
+							task.TaskID, logger.LogQuota(-quotaDelta), taskResult.TotalTokens, modelName)
+						model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
+					}
+				}
+				// 更新任务的实际消耗quota
+				task.Quota = actualQuota
+			}
+
+			logger.LogInfo(ctx, fmt.Sprintf("视频任务 %s 完成，使用token计费: %d tokens, quota: %d", task.TaskID, taskResult.TotalTokens, actualQuota))
+		}
 	case model.TaskStatusFailure:
 		task.Status = model.TaskStatusFailure
 		task.Progress = "100%"

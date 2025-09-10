@@ -1,0 +1,8 @@
+$env:GOOS="linux"; $env:GOARCH="amd64"; $env:CGO_ENABLED="0"
+go build -o volc-api
+
+
+chmod +x volc-api
+nohup ./volc-api > app.log 2>&1 &
+
+ps aux | grep volc-api

@@ -57,14 +57,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.
 	if modelName == "" {
 		modelName = service.CoverTaskActionToModelName(platform, info.Action)
 	}
+	// 任务提交时使用按次计费价格（defaultModelPrice），不是按token倍率
 	modelPrice, success := ratio_setting.GetModelPrice(modelName, true)
 	if !success {
-		defaultPrice, ok := ratio_setting.GetDefaultModelRatioMap()[modelName]
-		if !ok {
-			modelPrice = 0.1
-		} else {
-			modelPrice = defaultPrice
-		}
+		// 如果没有设置按次计费价格，使用默认值
+		modelPrice = 0.1
 	}
 
 	// 预扣
@@ -182,6 +179,10 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.
 	task.Quota = quota
 	task.Data = taskData
 	task.Action = info.Action
+	task.Group = info.UsingGroup
+	task.ModelName = info.OriginModelName
+	task.TokenId = info.TokenId
+	task.TokenName = c.GetString("token_name")
 	err = task.Insert()
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "insert_task_failed", http.StatusInternalServerError)

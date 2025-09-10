@@ -28,8 +28,11 @@ type Task struct {
 	Platform   constant.TaskPlatform `json:"platform" gorm:"type:varchar(30);index"` // 平台
 	UserId     int                   `json:"user_id" gorm:"index"`
 	ChannelId  int                   `json:"channel_id" gorm:"index"`
+	TokenId    int                   `json:"token_id" gorm:"index"`               // Token ID
+	TokenName  string                `json:"token_name" gorm:"type:varchar(100)"` // Token 名称
 	Quota      int                   `json:"quota"`
 	Action     string                `json:"action" gorm:"type:varchar(40);index"` // 任务类型, song, lyrics, description-mode
+	ModelName  string                `json:"model_name" gorm:"type:varchar(100)"`  // 模型名称
 	Status     TaskStatus            `json:"status" gorm:"type:varchar(20);index"` // 任务状态
 	FailReason string                `json:"fail_reason"`
 	SubmitTime int64                 `json:"submit_time" gorm:"index"`
@@ -37,6 +40,7 @@ type Task struct {
 	FinishTime int64                 `json:"finish_time" gorm:"index"`
 	Progress   string                `json:"progress" gorm:"type:varchar(20);index"`
 	Properties Properties            `json:"properties" gorm:"type:json"`
+	Group      string                `json:"group" gorm:"type:varchar(40)"` // 使用的分组
 
 	Data json.RawMessage `json:"data" gorm:"type:json"`
 }
