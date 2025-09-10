@@ -159,6 +159,11 @@ export const CHANNEL_OPTIONS = [
     color: 'purple',
     label: 'Vidu',
   },
+  {
+    value: 53,
+    color: 'orange',
+    label: '火山视频专用',
+  },
 ];
 
 export const MODEL_TABLE_PAGE_SIZE = 10;

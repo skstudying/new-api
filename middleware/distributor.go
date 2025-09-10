@@ -170,6 +170,11 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		relayMode := relayconstant.RelayModeUnknown
 		if c.Request.Method == http.MethodPost {
 			relayMode = relayconstant.RelayModeVideoSubmit
+			// 将方舟视频模型自动映射到火山视频专用平台
+			modelLower := strings.ToLower(modelRequest.Model)
+			if strings.HasPrefix(modelLower, "doubao-seedance") || strings.HasPrefix(modelLower, "wan2-1-14b") {
+				c.Set("platform", string(constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeVolcVideo))))
+			}
 		} else if c.Request.Method == http.MethodGet {
 			relayMode = relayconstant.RelayModeVideoFetchByID
 			shouldSelectChannel = false

@@ -13,6 +13,7 @@ import (
 	"one-api/model"
 	relaycommon "one-api/relay/common"
 	relayconstant "one-api/relay/constant"
+	"one-api/relay/helper"
 	"one-api/service"
 	"one-api/setting/ratio_setting"
 
@@ -38,12 +39,20 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.
 		return service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
 	}
 	adaptor.Init(info)
+
+	// 应用模型映射
+	err := helper.ModelMappedHelper(c, info, nil)
+	if err != nil {
+		return service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	}
+
 	// get & validate taskRequest 获取并验证文本请求
 	taskErr = adaptor.ValidateRequestAndSetAction(c, info)
 	if taskErr != nil {
 		return
 	}
 
+	// 计费使用原始模型名称，而不是映射后的模型名称
 	modelName := info.OriginModelName
 	if modelName == "" {
 		modelName = service.CoverTaskActionToModelName(platform, info.Action)
