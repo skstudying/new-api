@@ -720,10 +720,14 @@ func GeminiToOpenAIRequest(geminiRequest *dto.GeminiChatRequest, info *relaycomm
 	if geminiRequest.GenerationConfig.Temperature != nil {
 		openaiRequest.Temperature = geminiRequest.GenerationConfig.Temperature
 	}
-	if geminiRequest.GenerationConfig.TopP != nil && *geminiRequest.GenerationConfig.TopP > 0 {
-		openaiRequest.TopP = lo.ToPtr(*geminiRequest.GenerationConfig.TopP)
+	if geminiRequest.GenerationConfig.TopP != nil {
+		topP := *geminiRequest.GenerationConfig.TopP
+		if topP == 0 {
+			topP = 0.0001
+		}
+		openaiRequest.TopP = lo.ToPtr(topP)
 	}
-	if geminiRequest.GenerationConfig.TopK != nil && *geminiRequest.GenerationConfig.TopK > 0 {
+	if geminiRequest.GenerationConfig.TopK != nil {
 		openaiRequest.TopK = lo.ToPtr(int(*geminiRequest.GenerationConfig.TopK))
 	}
 	if geminiRequest.GenerationConfig.MaxOutputTokens != nil && *geminiRequest.GenerationConfig.MaxOutputTokens > 0 {

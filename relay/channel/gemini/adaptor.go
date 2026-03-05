@@ -40,6 +40,10 @@ func (a *Adaptor) ConvertGeminiRequest(c *gin.Context, info *relaycommon.RelayIn
 			}
 		}
 	}
+	if request.GenerationConfig.TopP != nil && *request.GenerationConfig.TopP == 0 {
+		request.GenerationConfig.TopP = lo.ToPtr(float64(0.0001))
+	}
+
 	return request, nil
 }
 
