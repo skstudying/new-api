@@ -205,12 +205,8 @@ func CovertOpenAI2Gemini(c *gin.Context, textRequest dto.GeneralOpenAIRequest, i
 		},
 	}
 
-	if textRequest.TopP != nil {
-		topP := *textRequest.TopP
-		if topP == 0 {
-			topP = 0.0001
-		}
-		geminiRequest.GenerationConfig.TopP = common.GetPointer(topP)
+	if textRequest.TopP != nil && *textRequest.TopP > 0 {
+		geminiRequest.GenerationConfig.TopP = common.GetPointer(*textRequest.TopP)
 	}
 
 	if maxTokens := textRequest.GetMaxTokens(); maxTokens > 0 {
