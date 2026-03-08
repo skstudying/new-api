@@ -1043,6 +1043,32 @@ func getResponseToolCall(item *dto.GeminiPart) *dto.ToolCallResponse {
 	}
 }
 
+func applyGeminiTokensDetailsToPromptUsage(usage *dto.Usage, details []dto.GeminiTokensDetails) {
+	for _, detail := range details {
+		switch detail.Modality {
+		case "AUDIO":
+			usage.PromptTokensDetails.AudioTokens += detail.TokenCount
+		case "TEXT":
+			usage.PromptTokensDetails.TextTokens += detail.TokenCount
+		case "IMAGE":
+			usage.PromptTokensDetails.ImageTokens += detail.TokenCount
+		}
+	}
+}
+
+func applyGeminiTokensDetailsToCompletionUsage(usage *dto.Usage, details []dto.GeminiTokensDetails) {
+	for _, detail := range details {
+		switch detail.Modality {
+		case "AUDIO":
+			usage.CompletionTokenDetails.AudioTokens += detail.TokenCount
+		case "TEXT":
+			usage.CompletionTokenDetails.TextTokens += detail.TokenCount
+		case "IMAGE":
+			usage.CompletionTokenDetails.ImageTokens += detail.TokenCount
+		}
+	}
+}
+
 func buildUsageFromGeminiMetadata(metadata dto.GeminiUsageMetadata, fallbackPromptTokens int) dto.Usage {
 	promptTokens := metadata.PromptTokenCount + metadata.ToolUsePromptTokenCount
 	if promptTokens <= 0 && fallbackPromptTokens > 0 {
@@ -1050,31 +1076,22 @@ func buildUsageFromGeminiMetadata(metadata dto.GeminiUsageMetadata, fallbackProm
 	}
 
 	usage := dto.Usage{
-		PromptTokens:     promptTokens,
-		CompletionTokens: metadata.CandidatesTokenCount + metadata.ThoughtsTokenCount,
-		TotalTokens:      metadata.TotalTokenCount,
+		PromptTokens: promptTokens,
+		TotalTokens:  metadata.TotalTokenCount,
 	}
 	usage.CompletionTokenDetails.ReasoningTokens = metadata.ThoughtsTokenCount
 	usage.PromptTokensDetails.CachedTokens = metadata.CachedContentTokenCount
 
-	for _, detail := range metadata.PromptTokensDetails {
-		if detail.Modality == "AUDIO" {
-			usage.PromptTokensDetails.AudioTokens += detail.TokenCount
-		} else if detail.Modality == "TEXT" {
-			usage.PromptTokensDetails.TextTokens += detail.TokenCount
-		}
-	}
-	for _, detail := range metadata.ToolUsePromptTokensDetails {
-		if detail.Modality == "AUDIO" {
-			usage.PromptTokensDetails.AudioTokens += detail.TokenCount
-		} else if detail.Modality == "TEXT" {
-			usage.PromptTokensDetails.TextTokens += detail.TokenCount
-		}
+	if usage.TotalTokens > 0 {
+		usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
+	} else {
+		usage.CompletionTokens = metadata.CandidatesTokenCount + metadata.ThoughtsTokenCount
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 
-	if usage.TotalTokens > 0 && usage.CompletionTokens <= 0 {
-		usage.CompletionTokens = usage.TotalTokens - usage.PromptTokens
-	}
+	applyGeminiTokensDetailsToPromptUsage(&usage, metadata.PromptTokensDetails)
+	applyGeminiTokensDetailsToPromptUsage(&usage, metadata.ToolUsePromptTokensDetails)
+	applyGeminiTokensDetailsToCompletionUsage(&usage, metadata.CandidatesTokensDetails)
 
 	if usage.PromptTokens > 0 && usage.PromptTokensDetails.TextTokens == 0 && usage.PromptTokensDetails.AudioTokens == 0 {
 		usage.PromptTokensDetails.TextTokens = usage.PromptTokens

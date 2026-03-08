@@ -341,6 +341,7 @@ func InitRatioSettings() {
 	cacheRatioMap.AddAll(defaultCacheRatio)
 	createCacheRatioMap.AddAll(defaultCreateCacheRatio)
 	imageRatioMap.AddAll(defaultImageRatio)
+	imageOutputRatioMap.AddAll(defaultImageOutputRatio)
 	audioRatioMap.AddAll(defaultAudioRatio)
 	audioCompletionRatioMap.AddAll(defaultAudioCompletionRatio)
 }
@@ -650,6 +651,8 @@ var defaultImageRatio = map[string]float64{
 	"gpt-image-1": 2,
 }
 var imageRatioMap = types.NewRWMap[string, float64]()
+var defaultImageOutputRatio = map[string]float64{}
+var imageOutputRatioMap = types.NewRWMap[string, float64]()
 var audioRatioMap = types.NewRWMap[string, float64]()
 var audioCompletionRatioMap = types.NewRWMap[string, float64]()
 
@@ -658,7 +661,7 @@ func ImageRatio2JSONString() string {
 }
 
 func UpdateImageRatioByJSONString(jsonStr string) error {
-	return types.LoadFromJsonString(imageRatioMap, jsonStr)
+	return types.LoadFromJsonStringWithCallback(imageRatioMap, jsonStr, InvalidateExposedDataCache)
 }
 
 func GetImageRatio(name string) (float64, bool) {
@@ -667,6 +670,30 @@ func GetImageRatio(name string) (float64, bool) {
 		return 1, false // Default to 1 if not found
 	}
 	return ratio, true
+}
+
+func ImageOutputRatio2JSONString() string {
+	return imageOutputRatioMap.MarshalJSONString()
+}
+
+func UpdateImageOutputRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonStringWithCallback(imageOutputRatioMap, jsonStr, InvalidateExposedDataCache)
+}
+
+func GetImageOutputRatio(name string) (float64, bool) {
+	ratio, ok := imageOutputRatioMap.Get(name)
+	if !ok {
+		return 1, false
+	}
+	return ratio, true
+}
+
+func GetImageOutputRatioCopy() map[string]float64 {
+	return imageOutputRatioMap.ReadAll()
+}
+
+func GetImageRatioCopy() map[string]float64 {
+	return imageRatioMap.ReadAll()
 }
 
 func AudioRatio2JSONString() string {
@@ -695,6 +722,14 @@ func GetModelPriceCopy() map[string]float64 {
 
 func GetCompletionRatioCopy() map[string]float64 {
 	return completionRatioMap.ReadAll()
+}
+
+func GetAudioRatioCopy() map[string]float64 {
+	return audioRatioMap.ReadAll()
+}
+
+func GetAudioCompletionRatioCopy() map[string]float64 {
+	return audioCompletionRatioMap.ReadAll()
 }
 
 // 转换模型名，减少渠道必须配置各种带参数模型

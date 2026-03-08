@@ -1436,7 +1436,9 @@ export function renderModelPrice(
   cacheRatio = 1.0,
   image = false,
   imageRatio = 1.0,
-  imageOutputTokens = 0,
+  imageInputTokens = 0,
+  completionImageTokens = 0,
+  imageOutputRatio = 1.0,
   webSearch = false,
   webSearchCallCount = 0,
   webSearchPrice = 0,
@@ -1494,19 +1496,28 @@ export function renderModelPrice(
     const completionRatioPrice = modelRatio * 2.0 * completionRatio;
     const cacheRatioPrice = modelRatio * 2.0 * cacheRatio;
     const imageRatioPrice = modelRatio * 2.0 * imageRatio;
+    const imageOutputRatioPrice = modelRatio * 2.0 * imageOutputRatio;
     let effectiveInputTokens =
       inputTokens - cacheTokens + cacheTokens * cacheRatio;
-    if (image && imageOutputTokens > 0) {
+    if (image && imageInputTokens > 0) {
       effectiveInputTokens =
-        inputTokens - imageOutputTokens + imageOutputTokens * imageRatio;
+        inputTokens - imageInputTokens + imageInputTokens * imageRatio;
     }
     if (audioInputTokens > 0) {
       effectiveInputTokens -= audioInputTokens;
     }
+
+    const baseCompletionTokens = Math.max(
+      completionTokens - completionImageTokens,
+      0,
+    );
+    const shouldSplitOutput =
+      completionImageTokens > 0 && imageOutputRatio !== completionRatio;
     const price =
       (effectiveInputTokens / 1000000) * inputRatioPrice * groupRatio +
       (audioInputTokens / 1000000) * audioInputPrice * groupRatio +
-      (completionTokens / 1000000) * completionRatioPrice * groupRatio +
+      (baseCompletionTokens / 1000000) * completionRatioPrice * groupRatio +
+      (completionImageTokens / 1000000) * imageOutputRatioPrice * groupRatio +
       (webSearchCallCount / 1000) * webSearchPrice * groupRatio +
       (fileSearchCallCount / 1000) * fileSearchPrice * groupRatio +
       imageGenerationCallPrice * groupRatio;
@@ -1523,12 +1534,29 @@ export function renderModelPrice(
                 : '',
             })}
           </p>
-          <p>
-            {i18next.t('补全价格：{{symbol}}{{total}} / 1M tokens', {
-              symbol,
-              total: (completionRatioPrice * rate).toFixed(6),
-            })}
-          </p>
+          {shouldSplitOutput ? (
+            <>
+              <p>
+                {i18next.t('文字输出价格：{{symbol}}{{total}} / 1M tokens', {
+                  symbol,
+                  total: (completionRatioPrice * rate).toFixed(6),
+                })}
+              </p>
+              <p>
+                {i18next.t('图片输出价格：{{symbol}}{{total}} / 1M tokens', {
+                  symbol,
+                  total: (imageOutputRatioPrice * rate).toFixed(6),
+                })}
+              </p>
+            </>
+          ) : (
+            <p>
+              {i18next.t('补全价格：{{symbol}}{{total}} / 1M tokens', {
+                symbol,
+                total: (completionRatioPrice * rate).toFixed(6),
+              })}
+            </p>
+          )}
           {cacheTokens > 0 && (
             <p>
               {i18next.t('缓存读取价格：{{symbol}}{{total}} / 1M tokens', {
@@ -1537,7 +1565,7 @@ export function renderModelPrice(
               })}
             </p>
           )}
-          {image && imageOutputTokens > 0 && (
+          {image && imageInputTokens > 0 && (
             <p>
               {i18next.t('图片输入价格：{{symbol}}{{total}} / 1M tokens', {
                 symbol,
@@ -1572,12 +1600,12 @@ export function renderModelPrice(
           <p>
             {(() => {
               let inputDesc = '';
-              if (image && imageOutputTokens > 0) {
+              if (image && imageInputTokens > 0) {
                 inputDesc = i18next.t(
                   '(输入 {{nonImageInput}} tokens + 图片输入 {{imageInput}} tokens / 1M tokens * {{symbol}}{{price}}',
                   {
-                    nonImageInput: inputTokens - imageOutputTokens,
-                    imageInput: imageOutputTokens,
+                    nonImageInput: inputTokens - imageInputTokens,
+                    imageInput: imageInputTokens,
                     symbol: symbol,
                     price: (inputRatioPrice * rate).toFixed(6),
                   },
@@ -1615,16 +1643,29 @@ export function renderModelPrice(
                 );
               }
 
-              const outputDesc = i18next.t(
-                '输出 {{completion}} tokens / 1M tokens * {{symbol}}{{compPrice}}) * {{ratioType}} {{ratio}}',
-                {
-                  completion: completionTokens,
-                  symbol: symbol,
-                  compPrice: (completionRatioPrice * rate).toFixed(6),
-                  ratio: groupRatio,
-                  ratioType: ratioLabel,
-                },
-              );
+              const outputDesc = shouldSplitOutput
+                ? i18next.t(
+                    '输出 文字输出 {{textCompletion}} tokens / 1M tokens * {{symbol}}{{textCompPrice}} + 图片输出 {{imageCompletion}} tokens / 1M tokens * {{symbol}}{{imageCompPrice}}) * {{ratioType}} {{ratio}}',
+                    {
+                      textCompletion: baseCompletionTokens,
+                      imageCompletion: completionImageTokens,
+                      symbol: symbol,
+                      textCompPrice: (completionRatioPrice * rate).toFixed(6),
+                      imageCompPrice: (imageOutputRatioPrice * rate).toFixed(6),
+                      ratio: groupRatio,
+                      ratioType: ratioLabel,
+                    },
+                  )
+                : i18next.t(
+                    '输出 {{completion}} tokens / 1M tokens * {{symbol}}{{compPrice}}) * {{ratioType}} {{ratio}}',
+                    {
+                      completion: completionTokens,
+                      symbol: symbol,
+                      compPrice: (completionRatioPrice * rate).toFixed(6),
+                      ratio: groupRatio,
+                      ratioType: ratioLabel,
+                    },
+                  );
 
               const extraServices = [
                 webSearch && webSearchCallCount > 0
@@ -1713,8 +1754,11 @@ export function renderModelPrice(
       : null;
 
   const textInputTokens = Math.max(inputTokens - cacheTokens - audioInputTokens, 0);
-  const imageInputTokens = image && imageOutputTokens > 0 ? imageOutputTokens : 0;
+  const imageInputTokensCount = image && imageInputTokens > 0 ? imageInputTokens : 0;
   const cacheInputTokens = cacheTokens;
+  const imageOutputRatioValue = formatRatioValue(imageOutputRatio);
+  const baseCompletionTokensRatio = Math.max(completionTokens - completionImageTokens, 0);
+  const shouldSplitOutputRatio = completionImageTokens > 0 && imageOutputRatio !== completionRatio;
 
   const textInputAmount =
     (textInputTokens / 1000000) * inputRatioPrice * groupRatio;
@@ -1724,14 +1768,17 @@ export function renderModelPrice(
     cacheRatioValue *
     groupRatio;
   const imageInputAmount =
-    (imageInputTokens / 1000000) *
+    (imageInputTokensCount / 1000000) *
     inputRatioPrice *
     imageRatioValue *
     groupRatio;
   const audioInputAmount =
     (audioInputTokens / 1000000) * audioInputPrice * groupRatio;
-  const completionAmount =
-    (completionTokens / 1000000) * completionRatioPrice * groupRatio;
+  const textCompletionAmount =
+    (baseCompletionTokensRatio / 1000000) * completionRatioPrice * groupRatio;
+  const imageCompletionAmount =
+    (completionImageTokens / 1000000) * modelRatio * 2.0 * imageOutputRatioValue * groupRatio;
+  const completionAmount = textCompletionAmount + imageCompletionAmount;
   const webSearchAmount = (webSearchCallCount / 1000) * webSearchPrice * groupRatio;
   const fileSearchAmount =
     (fileSearchCallCount / 1000) * fileSearchPrice * groupRatio;
@@ -1763,9 +1810,14 @@ export function renderModelPrice(
                   cacheRatio: cacheRatioValue,
                 })
               : null,
-            imageInputTokens > 0
+            imageInputTokensCount > 0
               ? i18next.t('图片倍率 {{imageRatio}}', {
                   imageRatio: imageRatioValue,
+                })
+              : null,
+            shouldSplitOutputRatio
+              ? i18next.t('图片输出倍率 {{imageOutputRatio}}', {
+                  imageOutputRatio: imageOutputRatioValue,
                 })
               : null,
             audioRatioValue !== null
@@ -1810,12 +1862,12 @@ export function renderModelPrice(
             )}
           </p>
         )}
-        {imageInputTokens > 0 && (
+        {imageInputTokensCount > 0 && (
           <p>
             {i18next.t(
               '图片输入：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 图片倍率 {{imageRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
               {
-                tokens: imageInputTokens,
+                tokens: imageInputTokensCount,
                 modelRatio: modelRatioValue,
                 imageRatio: imageRatioValue,
                 ratioType: ratioLabel,
@@ -1840,19 +1892,50 @@ export function renderModelPrice(
             )}
           </p>
         )}
-        <p>
-          {i18next.t(
-            '输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 补全倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
-            {
-              tokens: completionTokens,
-              modelRatio: modelRatioValue,
-              completionRatio: completionRatioValue,
-              ratioType: ratioLabel,
-              ratio: groupRatio,
-              amount: renderDisplayAmountFromUsd(completionAmount),
-            },
-          )}
-        </p>
+        {shouldSplitOutputRatio ? (
+          <>
+            <p>
+              {i18next.t(
+                '文字输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 补全倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
+                {
+                  tokens: baseCompletionTokensRatio,
+                  modelRatio: modelRatioValue,
+                  completionRatio: completionRatioValue,
+                  ratioType: ratioLabel,
+                  ratio: groupRatio,
+                  amount: renderDisplayAmountFromUsd(textCompletionAmount),
+                },
+              )}
+            </p>
+            <p>
+              {i18next.t(
+                '图片输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 图片输出倍率 {{imageOutputRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
+                {
+                  tokens: completionImageTokens,
+                  modelRatio: modelRatioValue,
+                  imageOutputRatio: imageOutputRatioValue,
+                  ratioType: ratioLabel,
+                  ratio: groupRatio,
+                  amount: renderDisplayAmountFromUsd(imageCompletionAmount),
+                },
+              )}
+            </p>
+          </>
+        ) : (
+          <p>
+            {i18next.t(
+              '输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 补全倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
+              {
+                tokens: completionTokens,
+                modelRatio: modelRatioValue,
+                completionRatio: completionRatioValue,
+                ratioType: ratioLabel,
+                ratio: groupRatio,
+                amount: renderDisplayAmountFromUsd(completionAmount),
+              },
+            )}
+          </p>
+        )}
         {webSearch && webSearchCallCount > 0 && (
           <p>
             {i18next.t(
