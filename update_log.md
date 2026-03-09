@@ -156,6 +156,8 @@
 
 **组 E + 组 H + 组 I — xAI 生图生视频完整支持** — 适配 new-api 架构并内嵌计费修复
 
+**Commit**: `be22646d` — feat: xAI image and video generation/edit support with unified task billing
+
 #### 架构适配说明
 
 my-api 的 16 个迭代 commit 使用独立 `controller/task_video.go` 做轮询计费。本次**完全适配 new-api 架构**，使用统一的 `TaskAdaptor` 接口 + `service/task_polling.go`：
