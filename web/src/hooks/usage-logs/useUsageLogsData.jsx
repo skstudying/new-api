@@ -36,6 +36,8 @@ import {
   renderAudioModelPrice,
   renderClaudeModelPrice,
   renderModelPrice,
+  renderVideoEditPrice,
+  renderVideoGenerationPrice,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -480,7 +482,27 @@ export const useLogsData = () => {
 
         let content = '';
         if (!isViolationFeeLog) {
-          if (other?.ws || other?.audio) {
+          if (other?.moderation && logs[i].quota === 0) {
+            content = t('任务违规(content moderation)，费用不予返还');
+          } else if (other?.xai_video_edit && other?.seconds > 0) {
+            content = renderVideoEditPrice(
+              other?.model_price || 0,
+              other?.group_ratio,
+              other?.user_group_ratio,
+              other.seconds,
+              0.01,
+            );
+          } else if (other?.xai_video_generation && other?.seconds > 0) {
+            content = renderVideoGenerationPrice(
+              other?.model_price || 0,
+              other?.group_ratio,
+              other?.user_group_ratio,
+              other.seconds,
+              other?.['resolution(720p)'] || 1,
+              other?.xai_input_image_count || 0,
+              other?.xai_input_image_price || 0,
+            );
+          } else if (other?.ws || other?.audio) {
             content = renderAudioModelPrice(
               other?.text_input,
               other?.text_output,
@@ -553,6 +575,18 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('计费过程'),
             value: content,
+          });
+        }
+        if (other?.moderation) {
+          expandDataLocal.push({
+            key: t('内容审核'),
+            value: t('任务被内容审核拦截，费用不予返还'),
+          });
+        }
+        if (other?.xai_input_image_count > 0) {
+          expandDataLocal.push({
+            key: t('xAI 输入图片'),
+            value: `${other.xai_input_image_count} ${t('张')}，$${other.xai_input_image_price?.toFixed(4)}/${t('张')}`,
           });
         }
         if (other?.reasoning_effort) {

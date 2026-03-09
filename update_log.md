@@ -152,6 +152,49 @@
 
 ## Update Log
 
+### v0.0.2
+
+**组 E + 组 H + 组 I — xAI 生图生视频完整支持** — 适配 new-api 架构并内嵌计费修复
+
+#### 架构适配说明
+
+my-api 的 16 个迭代 commit 使用独立 `controller/task_video.go` 做轮询计费。本次**完全适配 new-api 架构**，使用统一的 `TaskAdaptor` 接口 + `service/task_polling.go`：
+
+| my-api | new-api |
+|---|---|
+| `ValidateRequestAndSetAction` 含计费 | 拆分为 `ValidateRequestAndSetAction` + `EstimateBilling` |
+| `controller/task_video.go` 轮询计费 | `AdjustBillingOnComplete` (成功退差额/失败保留审核费) |
+| 直接操作用户余额 | `service.RecalculateTaskQuota` / `RefundTaskQuota` |
+
+#### 后端改动（7 个文件）
+
+- `constant/task.go` — 新增 `TaskActionEdit`
+- `relay/relay_adaptor.go` — 注册 xAI task adaptor
+- `relay/relay_task.go` — xAI 加入实时查询白名单 + 检测 `/videos/edits` 路由
+- `relay/common/relay_info.go` — `TaskInfo` 添加 `Duration` 字段 + `TaskSubmitReq.UnmarshalJSON` 支持 image 对象格式（组 I）
+- `relay/channel/xai/adaptor.go` — `ConvertImageRequest` 增加 xAI 特有字段 + 输入图片计费
+- `relay/channel/xai/dto.go` — `ImageRequest` 添加 xAI 字段
+- `router/video-router.go` — 新增 `/v1/videos/generations` 和 `/v1/videos/edits` 路由
+- `service/task_polling.go` — 失败时调用 `AdjustBillingOnComplete`（支持内容审核保留扣费）
+
+#### 新增文件（2 个）
+
+- `relay/channel/task/xai/adaptor.go` — xAI 视频任务适配器
+- `relay/channel/task/xai/constants.go` — 模型列表
+
+#### 前端改动（2 个文件）
+
+- `web/src/helpers/render.jsx` — 新增 `renderVideoEditPrice` 和 `renderVideoGenerationPrice`
+- `web/src/hooks/usage-logs/useUsageLogsData.jsx` — 视频价格展示 + 内容审核/输入图片展示
+
+#### 核心功能
+
+- **视频生成** — 按秒 × 分辨率倍率计费，支持输入图片附加费
+- **视频编辑** — 预扣 8.7s，完成后按实际时长退差额
+- **内容审核** — 生成保留扣费，编辑按 8s 计费
+- **超时/瞬态/404 处理** — 统一由轮询器处理
+- **图片生成增强** — 支持 `aspect_ratio`、`resolution`、`images` 参数
+
 ### v0.0.1
 
 **组 C 图片输出计费** — 分离 Gemini 生图模型的文字/图片输出 token 计费

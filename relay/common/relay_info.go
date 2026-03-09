@@ -692,6 +692,7 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	type Alias TaskSubmitReq
 	aux := &struct {
 		Metadata json.RawMessage `json:"metadata,omitempty"`
+		Image    json.RawMessage `json:"image,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(t),
@@ -699,6 +700,21 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 
 	if err := common.Unmarshal(data, &aux); err != nil {
 		return err
+	}
+
+	// image: accept both "url" (string) and {"url": "..."} (object)
+	if len(aux.Image) > 0 {
+		var imageStr string
+		if common.Unmarshal(aux.Image, &imageStr) == nil {
+			t.Image = imageStr
+		} else {
+			var imageObj struct {
+				URL string `json:"url"`
+			}
+			if common.Unmarshal(aux.Image, &imageObj) == nil {
+				t.Image = imageObj.URL
+			}
+		}
 	}
 
 	if len(aux.Metadata) > 0 {
@@ -735,15 +751,16 @@ func (t *TaskSubmitReq) UnmarshalMetadata(v any) error {
 }
 
 type TaskInfo struct {
-	Code             int    `json:"code"`
-	TaskID           string `json:"task_id"`
-	Status           string `json:"status"`
-	Reason           string `json:"reason,omitempty"`
-	Url              string `json:"url,omitempty"`
-	RemoteUrl        string `json:"remote_url,omitempty"`
-	Progress         string `json:"progress,omitempty"`
-	CompletionTokens int    `json:"completion_tokens,omitempty"` // 用于按倍率计费
-	TotalTokens      int    `json:"total_tokens,omitempty"`      // 用于按倍率计费
+	Code             int     `json:"code"`
+	TaskID           string  `json:"task_id"`
+	Status           string  `json:"status"`
+	Reason           string  `json:"reason,omitempty"`
+	Url              string  `json:"url,omitempty"`
+	RemoteUrl        string  `json:"remote_url,omitempty"`
+	Progress         string  `json:"progress,omitempty"`
+	Duration         float64 `json:"duration,omitempty"`          // 视频实际时长（秒）
+	CompletionTokens int     `json:"completion_tokens,omitempty"` // 用于按倍率计费
+	TotalTokens      int     `json:"total_tokens,omitempty"`      // 用于按倍率计费
 }
 
 func FailTaskInfo(reason string) *TaskInfo {

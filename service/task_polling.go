@@ -461,7 +461,13 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		logger.LogInfo(ctx, fmt.Sprintf("Task %s failed: %s", task.TaskID, task.FailReason))
 		taskResult.Progress = taskcommon.ProgressComplete
 		if quota != 0 {
-			shouldRefund = true
+			// Let the adaptor decide: if it returns a positive value, settle
+			// to that amount instead of a full refund (e.g. content moderation).
+			if retainedQuota := adaptor.AdjustBillingOnComplete(task, taskResult); retainedQuota > 0 {
+				shouldSettle = true
+			} else {
+				shouldRefund = true
+			}
 		}
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, task.TaskID)

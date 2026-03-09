@@ -1,11 +1,13 @@
 package xai
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
@@ -43,7 +45,47 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		Prompt:         request.Prompt,
 		N:              int(lo.FromPtrOr(request.N, uint(1))),
 		ResponseFormat: request.ResponseFormat,
+		Image:          request.Image,
 	}
+
+	storage, err := common.GetBodyStorage(c)
+	if err == nil {
+		body, _ := storage.Bytes()
+		var raw struct {
+			AspectRatio string          `json:"aspect_ratio"`
+			Resolution  string          `json:"resolution"`
+			Images      json.RawMessage `json:"images"`
+		}
+		if json.Unmarshal(body, &raw) == nil {
+			if raw.AspectRatio != "" {
+				xaiRequest.AspectRatio = raw.AspectRatio
+			}
+			if raw.Resolution != "" {
+				xaiRequest.Resolution = raw.Resolution
+			}
+			if raw.Images != nil {
+				xaiRequest.Images = raw.Images
+			}
+		}
+	}
+
+	if strings.HasPrefix(request.Model, "grok-imagine-image") {
+		inputImageCount := 0
+		if len(xaiRequest.Image) > 0 {
+			inputImageCount = 1
+		}
+		if xaiRequest.Images != nil {
+			var imageArr []json.RawMessage
+			if json.Unmarshal(xaiRequest.Images, &imageArr) == nil {
+				inputImageCount = len(imageArr)
+			}
+		}
+		if inputImageCount > 0 {
+			c.Set("xai_input_image_count", inputImageCount)
+			c.Set("xai_input_image_price", 0.002)
+		}
+	}
+
 	return xaiRequest, nil
 }
 
