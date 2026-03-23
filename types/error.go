@@ -438,15 +438,19 @@ func looksLikeUpstreamProviderError(message string) bool {
 	// AWS SDK v2 / Bedrock
 	if strings.Contains(lower, "bedrock") ||
 		strings.Contains(lower, "invokemodel") ||
+		strings.Contains(lower, "invoke model") ||
 		strings.Contains(lower, "validationexception") ||
+		strings.Contains(lower, "validation exception") ||
 		strings.Contains(lower, "throttlingexception") ||
 		strings.Contains(lower, "serviceunavailableexception") ||
 		strings.Contains(lower, "accessdeniedexception") ||
 		strings.Contains(lower, "resource not found") ||
-		strings.Contains(lower, "operation error") && strings.Contains(lower, "bedrock") {
+		(strings.Contains(lower, "operation error") && strings.Contains(lower, "bedrock")) {
 		return true
 	}
-	if strings.Contains(lower, "requestid:") && strings.Contains(lower, "statuscode:") {
+	// AWS Go SDK v2 常见格式（大小写不敏感）
+	if strings.Contains(lower, "https response error") ||
+		(strings.Contains(lower, "requestid") && strings.Contains(lower, "statuscode")) {
 		return true
 	}
 	return false
@@ -498,10 +502,16 @@ func IsOfficialAnthropicError(err *NewAPIError) bool {
 	switch err.errorType {
 	case ErrorTypeClaudeError:
 		if claudeErr, ok := err.RelayError.(ClaudeError); ok {
+			if isNewAPIShapedGatewayError(ClaudeErrorToOpenAIError(claudeErr)) {
+				return false
+			}
 			if anthropicOfficialErrorTypes[claudeErr.Type] {
 				return true
 			}
 			if looksLikeUpstreamProviderError(claudeErr.Message) {
+				return true
+			}
+			if looksLikeUpstreamProviderError(err.Error()) {
 				return true
 			}
 		}
@@ -510,10 +520,23 @@ func IsOfficialAnthropicError(err *NewAPIError) bool {
 			if isNewAPIShapedGatewayError(oaiErr) {
 				return false
 			}
+			// 上游 new-api Claude 包装里常无 code 字段 → WithOpenAIError 固定为 unknown_error，正文仍是 Bedrock/厂商错误
+			if err.errorCode == "unknown_error" {
+				return true
+			}
 			if anthropicOfficialErrorTypes[oaiErr.Type] {
 				return true
 			}
 			if looksLikeUpstreamProviderError(oaiErr.Message) {
+				return true
+			}
+			// Message 未写入 OpenAIError 时，Err 或 ToMessage 的文本可能在 Error() 里
+			if looksLikeUpstreamProviderError(err.Error()) {
+				return true
+			}
+			// HTTP 4xx 且来自 bad_response_status_code：多为上游 API 业务错误体
+			if err.errorCode == ErrorCodeBadResponseStatusCode &&
+				err.StatusCode >= http.StatusBadRequest && err.StatusCode < http.StatusInternalServerError {
 				return true
 			}
 		}
@@ -521,16 +544,29 @@ func IsOfficialAnthropicError(err *NewAPIError) bool {
 	return false
 }
 
+// ClaudeErrorToOpenAIError 仅用于网关形态判定（与 OpenAI 形错误共用 isNewAPIShapedGatewayError）
+func ClaudeErrorToOpenAIError(c ClaudeError) OpenAIError {
+	return OpenAIError{Type: c.Type, Message: c.Message}
+}
+
 func (e *NewAPIError) GetOfficialClaudeErrorData() (errType string, message string) {
 	switch e.errorType {
 	case ErrorTypeClaudeError:
 		if claudeErr, ok := e.RelayError.(ClaudeError); ok {
-			msg := StripUpstreamRequestId(claudeErr.Message)
+			msg := claudeErr.Message
+			if strings.TrimSpace(msg) == "" {
+				msg = e.Error()
+			}
+			msg = StripUpstreamRequestId(msg)
 			return NormalizePassthroughClaudeErrorType(claudeErr.Type, e.StatusCode), msg
 		}
 	case ErrorTypeOpenAIError:
 		if oaiErr, ok := e.RelayError.(OpenAIError); ok {
-			msg := StripUpstreamRequestId(oaiErr.Message)
+			msg := oaiErr.Message
+			if strings.TrimSpace(msg) == "" {
+				msg = e.Error()
+			}
+			msg = StripUpstreamRequestId(msg)
 			return NormalizePassthroughClaudeErrorType(oaiErr.Type, e.StatusCode), msg
 		}
 	}
