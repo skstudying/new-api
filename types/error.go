@@ -428,6 +428,66 @@ func StripUpstreamRequestId(msg string) string {
 	return strings.TrimSpace(requestIdPattern.ReplaceAllString(msg, ""))
 }
 
+// looksLikeUpstreamProviderError 识别经上游 new-api 转发的 AWS Bedrock / SDK 等错误正文。
+// 上游把 Claude 错误里的 type 序列化成 "<nil>"（OpenAI Code 为 nil）时，不能仅靠 type 白名单判断。
+func looksLikeUpstreamProviderError(message string) bool {
+	if message == "" {
+		return false
+	}
+	lower := strings.ToLower(message)
+	// AWS SDK v2 / Bedrock
+	if strings.Contains(lower, "bedrock") ||
+		strings.Contains(lower, "invokemodel") ||
+		strings.Contains(lower, "validationexception") ||
+		strings.Contains(lower, "throttlingexception") ||
+		strings.Contains(lower, "serviceunavailableexception") ||
+		strings.Contains(lower, "accessdeniedexception") ||
+		strings.Contains(lower, "resource not found") ||
+		strings.Contains(lower, "operation error") && strings.Contains(lower, "bedrock") {
+		return true
+	}
+	if strings.Contains(lower, "requestid:") && strings.Contains(lower, "statuscode:") {
+		return true
+	}
+	return false
+}
+
+func isNewAPIShapedGatewayError(oaiErr OpenAIError) bool {
+	if strings.EqualFold(strings.TrimSpace(oaiErr.Type), "new_api_error") {
+		return true
+	}
+	// 上游 OpenAI 形 JSON 里 code 常为字符串
+	if codeStr, ok := oaiErr.Code.(string); ok {
+		switch ErrorCode(codeStr) {
+		case ErrorCodeModelNotFound, ErrorCodeGetChannelFailed, ErrorCodeModelPriceError,
+			ErrorCodeInsufficientUserQuota, ErrorCodeCountTokenFailed:
+			return true
+		}
+	}
+	return false
+}
+
+// NormalizePassthroughClaudeErrorType 将 "<nil>"、空、upstream_error 等规范为 Anthropic 常见 type，便于客户端展示。
+func NormalizePassthroughClaudeErrorType(typ string, statusCode int) string {
+	if anthropicOfficialErrorTypes[typ] {
+		return typ
+	}
+	switch typ {
+	case "", "<nil>", "upstream_error", "unknown_error":
+		if statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError {
+			return "invalid_request_error"
+		}
+		return "api_error"
+	}
+	if typ == string(ErrorCodeAwsInvokeError) || strings.EqualFold(typ, "aws_invoke_error") {
+		return "api_error"
+	}
+	if statusCode >= http.StatusBadRequest && statusCode < http.StatusInternalServerError {
+		return "invalid_request_error"
+	}
+	return "api_error"
+}
+
 func IsOfficialAnthropicError(err *NewAPIError) bool {
 	if err == nil {
 		return false
@@ -438,11 +498,24 @@ func IsOfficialAnthropicError(err *NewAPIError) bool {
 	switch err.errorType {
 	case ErrorTypeClaudeError:
 		if claudeErr, ok := err.RelayError.(ClaudeError); ok {
-			return anthropicOfficialErrorTypes[claudeErr.Type]
+			if anthropicOfficialErrorTypes[claudeErr.Type] {
+				return true
+			}
+			if looksLikeUpstreamProviderError(claudeErr.Message) {
+				return true
+			}
 		}
 	case ErrorTypeOpenAIError:
 		if oaiErr, ok := err.RelayError.(OpenAIError); ok {
-			return anthropicOfficialErrorTypes[oaiErr.Type]
+			if isNewAPIShapedGatewayError(oaiErr) {
+				return false
+			}
+			if anthropicOfficialErrorTypes[oaiErr.Type] {
+				return true
+			}
+			if looksLikeUpstreamProviderError(oaiErr.Message) {
+				return true
+			}
 		}
 	}
 	return false
@@ -452,12 +525,14 @@ func (e *NewAPIError) GetOfficialClaudeErrorData() (errType string, message stri
 	switch e.errorType {
 	case ErrorTypeClaudeError:
 		if claudeErr, ok := e.RelayError.(ClaudeError); ok {
-			return claudeErr.Type, StripUpstreamRequestId(claudeErr.Message)
+			msg := StripUpstreamRequestId(claudeErr.Message)
+			return NormalizePassthroughClaudeErrorType(claudeErr.Type, e.StatusCode), msg
 		}
 	case ErrorTypeOpenAIError:
 		if oaiErr, ok := e.RelayError.(OpenAIError); ok {
-			return oaiErr.Type, StripUpstreamRequestId(oaiErr.Message)
+			msg := StripUpstreamRequestId(oaiErr.Message)
+			return NormalizePassthroughClaudeErrorType(oaiErr.Type, e.StatusCode), msg
 		}
 	}
-	return "api_error", StripUpstreamRequestId(e.Error())
+	return NormalizePassthroughClaudeErrorType("", e.StatusCode), StripUpstreamRequestId(e.Error())
 }
