@@ -88,15 +88,16 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", newAPIError.Error()))
+
+			if relayFormat == types.RelayFormatClaude {
+				handleClaudeRelayError(c, newAPIError)
+				return
+			}
+
 			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
 				helper.WssError(c, ws, newAPIError.ToOpenAIError())
-			case types.RelayFormatClaude:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"type":  "error",
-					"error": newAPIError.ToClaudeError(),
-				})
 			default:
 				c.JSON(newAPIError.StatusCode, gin.H{
 					"error": newAPIError.ToOpenAIError(),
@@ -602,6 +603,45 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 		taskErr.Message = "当前分组上游负载已饱和，请稍后再试"
 	}
 	c.JSON(taskErr.StatusCode, taskErr)
+}
+
+func handleClaudeRelayError(c *gin.Context, newAPIError *types.NewAPIError) {
+	standardBody := []byte(`{"message":"Resource invocation service exception"}`)
+
+	if c.Writer.Written() {
+		var errData []byte
+		if types.IsOfficialAnthropicError(newAPIError) {
+			errType, errMsg := newAPIError.GetOfficialClaudeErrorData()
+			errData, _ = common.Marshal(map[string]any{
+				"type": "error",
+				"error": map[string]any{
+					"type":    errType,
+					"message": errMsg,
+				},
+			})
+		} else {
+			errData = standardBody
+		}
+		c.Render(-1, common.CustomEvent{Data: "event: error\n"})
+		c.Render(-1, common.CustomEvent{Data: fmt.Sprintf("data: %s\n", string(errData))})
+		c.Writer.Flush()
+		return
+	}
+
+	if types.IsOfficialAnthropicError(newAPIError) {
+		errType, errMsg := newAPIError.GetOfficialClaudeErrorData()
+		c.JSON(newAPIError.StatusCode, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    errType,
+				"message": errMsg,
+			},
+		})
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Resource invocation service exception",
+		})
+	}
 }
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {

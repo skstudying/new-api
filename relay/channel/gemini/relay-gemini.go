@@ -1475,9 +1475,8 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 
 		switch info.RelayFormat {
 		case types.RelayFormatClaude:
-			c.JSON(newAPIError.StatusCode, gin.H{
-				"type":  "error",
-				"error": newAPIError.ToClaudeError(),
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"message": "Resource invocation service exception",
 			})
 		default:
 			c.JSON(newAPIError.StatusCode, gin.H{

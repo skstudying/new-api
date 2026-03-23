@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -408,4 +409,55 @@ func IsRecordErrorLog(e *NewAPIError) bool {
 		return true
 	}
 	return *e.recordErrorLog
+}
+
+var anthropicOfficialErrorTypes = map[string]bool{
+	"invalid_request_error": true,
+	"authentication_error":  true,
+	"permission_error":      true,
+	"not_found_error":       true,
+	"request_too_large":     true,
+	"rate_limit_error":      true,
+	"api_error":             true,
+	"overloaded_error":      true,
+}
+
+var requestIdPattern = regexp.MustCompile(`\s*\(request id: [^)]*\)`)
+
+func StripUpstreamRequestId(msg string) string {
+	return strings.TrimSpace(requestIdPattern.ReplaceAllString(msg, ""))
+}
+
+func IsOfficialAnthropicError(err *NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	if err.errorCode == ErrorCodeAwsInvokeError {
+		return true
+	}
+	switch err.errorType {
+	case ErrorTypeClaudeError:
+		if claudeErr, ok := err.RelayError.(ClaudeError); ok {
+			return anthropicOfficialErrorTypes[claudeErr.Type]
+		}
+	case ErrorTypeOpenAIError:
+		if oaiErr, ok := err.RelayError.(OpenAIError); ok {
+			return anthropicOfficialErrorTypes[oaiErr.Type]
+		}
+	}
+	return false
+}
+
+func (e *NewAPIError) GetOfficialClaudeErrorData() (errType string, message string) {
+	switch e.errorType {
+	case ErrorTypeClaudeError:
+		if claudeErr, ok := e.RelayError.(ClaudeError); ok {
+			return claudeErr.Type, StripUpstreamRequestId(claudeErr.Message)
+		}
+	case ErrorTypeOpenAIError:
+		if oaiErr, ok := e.RelayError.(OpenAIError); ok {
+			return oaiErr.Type, StripUpstreamRequestId(oaiErr.Message)
+		}
+	}
+	return "api_error", StripUpstreamRequestId(e.Error())
 }
